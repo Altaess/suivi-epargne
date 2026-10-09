@@ -1,7 +1,7 @@
 name: Cours de clôture
 on:
   schedule:
-    - cron: "45 16 * * 1-5"
+    - cron: "45 17 * * 1-5"
   workflow_dispatch:
 permissions:
   contents: write
