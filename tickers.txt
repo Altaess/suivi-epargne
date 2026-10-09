@@ -1,4 +1,5 @@
-# Un symbole Yahoo Finance par ligne (Euronext Paris = suffixe .PA)
+# Une ligne = un symbole Yahoo (Euronext Paris = .PA) ou un ISIN (résolu automatiquement)
+# PEA
 CS.PA
 BNP.PA
 LR.PA
@@ -7,3 +8,8 @@ TTE.PA
 PAEEM.PA
 ETZ.PA
 WPEA.PA
+# Assurance vie (unités de compte)
+LU1829221024
+LU0164100710
+FR0011034818
+DE000A1EK0G3
