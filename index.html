@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Suivi épargne</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--tx:#1b1f24;--mut:#6b7280;--bd:#e3e6ea;--ac:#2563eb;--up:#15803d;--dn:#b91c1c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111418;--card:#1b2027;--tx:#e8eaed;--mut:#9aa3ae;--bd:#2c333c;--ac:#5b9bff;--up:#4ade80;--dn:#f87171}}
+:root[data-theme="dark"]{--bg:#111418;--card:#1b2027;--tx:#e8eaed;--mut:#9aa3ae;--bd:#2c333c;--ac:#5b9bff;--up:#4ade80;--dn:#f87171}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:12px}
+h1{font-size:18px;margin:4px 0 10px;display:flex;justify-content:space-between;align-items:center}
+#sync{font-size:12px;font-weight:400;color:var(--mut)}
+nav{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto}
+nav button{flex:1;white-space:nowrap;padding:9px 10px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;font-size:14px}
+nav button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px}
+.k{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px}
+.k small{color:var(--mut);display:block;font-size:12px}.k b{font-size:17px}
+.up{color:var(--up)}.dn{color:var(--dn)}
+.row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
+.row label{font-size:11px;color:var(--mut);display:block}
+input{width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font-size:15px}
+.name{font-weight:600}.top{display:flex;gap:8px;align-items:center}
+.res{display:flex;justify-content:space-between;gap:8px;margin-top:8px;font-size:13px;flex-wrap:wrap}
+.del{border:0;background:none;color:var(--dn);font-size:18px}
+.add{width:100%;padding:10px;border:1px dashed var(--ac);background:none;color:var(--ac);border-radius:10px;font-size:14px}
+.note{color:var(--mut);font-size:12px;margin:8px 2px}
+.bar{display:flex;height:12px;border-radius:6px;overflow:hidden;margin:8px 0}
+.g2{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stale{color:#b45309;font-size:11px}
+h2{font-size:14px;margin:14px 2px 8px}
+select{padding:6px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font-size:14px}
+</style></head><body><main>
+<h1>📈 Suivi épargne</h1>
+<div class="top" style="margin-bottom:8px"><button class="add" id="rf" style="border-style:solid">🔄 Actualiser les cours</button><button class="add" id="ex" style="width:auto">⬇️</button><button class="add" id="im" style="width:auto">⬆️</button><input type="file" id="fi" accept=".json" hidden></div><div class="note" id="msg"></div>
+<nav id="nav"></nav><div id="app"></div>
+</main>
+<script>
+const TABS=[["syn","Synthèse"],["pea","PEA"],["av","Assurance vie"],["la","Livret A"]];
+const PRE=[["AXA","CS.PA"],["BNP Paribas","BNP.PA"],["Legrand","LR.PA"],["Société Générale","GLE.PA"],["TotalEnergies","TTE.PA"],["Amundi PEA Emergent","PAEEM.PA"],["BNP Easy STOXX Europe 600","ETZ.PA"],["iShares MSCI World Swap PEA","WPEA.PA"]];
+const def=()=>({pea:PRE.map(([n,t])=>({n,t,q:"",pru:"",p:"",d:""})),av:{fe:{vers:0,solde:0,taux:2.5},uc:[]},la:{total:0,taux:1.5},hist:[]});
+let CK="tot",S=def(),tab="syn",db=null,ref=null,t=null;
+const $=s=>document.querySelector(s);
+const eur=n=>(n||0).toLocaleString("fr-FR",{style:"currency",currency:"EUR"});
+const pct=n=>(isFinite(n)?n:0).toLocaleString("fr-FR",{maximumFractionDigits:2,signDisplay:"exceptZero"})+" %";
+const cls=n=>n>=0?"up":"dn";
+const num=v=>{const x=parseFloat(String(v).replace(",","."));return isFinite(x)?x:0};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function load(){try{const j=localStorage.getItem("suivi");if(j)S=Object.assign(def(),JSON.parse(j))}catch(e){}}
+function snap(){const c=calc();if(!c.all)return;const d=new Date().toISOString().slice(0,10),f=x=>Math.round(x*100)/100,r={d,pea:f(c.p.v),av:f(c.avV),la:f(c.la)};S.hist=S.hist||[];const l=S.hist[S.hist.length-1];if(l&&l.d==d)S.hist[S.hist.length-1]=r;else S.hist.push(r)}
+function save(){snap();try{localStorage.setItem("suivi",JSON.stringify(S))}catch(e){}
+ if(ref){clearTimeout(t);t=setTimeout(()=>ref.set({json:JSON.stringify(S)}).then(()=>$("#sync").textContent="☁️ synchronisé").catch(()=>$("#sync").textContent="💾 local"),600)}}
+const val=l=>num(l.q)*num(l.p),inv=l=>num(l.q)*num(l.pru);
+const tot=a=>a.reduce((s,l)=>({v:s.v+val(l),i:s.i+inv(l)}),{v:0,i:0});
+const faLA=()=>num(S.la.total)*num(S.la.taux)/100;
+function calc(){
+ const p=tot(S.pea),u=tot(S.av.uc),fe=S.av.fe;
+ const avV=u.v+num(fe.solde),avI=u.i+num(fe.vers);
+ return{p,u,avV,avI,la:num(S.la.total),all:p.v+avV+num(S.la.total)}}
+function kpi(l,v,sub){return`<div class="k"><small>${l}</small><b>${v}</b>${sub?`<div class="${sub[0]}" style="font-size:12px">${sub[1]}</div>`:""}</div>`}
+function gainK(v,i){const g=v-i;return kpi("Plus-value",eur(g),[cls(g),pct(i?g/i*100:0)])}
+function lines(arr,key){return arr.map((l,i)=>{const g=val(l)-inv(l),old=l.d&&(Date.now()-new Date(l.d))>7*864e5;
+ return`<div class="card"><div class="top"><input class="name" data-k="${key}" data-i="${i}" data-f="n" value="${esc(l.n||"")}" placeholder="Nom"><input style="width:105px" data-k="${key}" data-i="${i}" data-f="t" value="${esc(l.t||"")}" placeholder="Symbole"><button class="del" data-del="${key}" data-i="${i}">✕</button></div>
+ <div class="row" style="grid-template-columns:repeat(3,1fr)">
+ ${[["q","Quantité"],["pru","PRU (€)"],["p","Cours (€)"]].map(([f,lb])=>`<div><label>${lb}</label><input inputmode="decimal" data-k="${key}" data-i="${i}" data-f="${f}" value="${l[f]??""}"></div>`).join("")}</div>
+ <div class="res"><span>Valeur <b>${eur(val(l))}</b></span><span>Investi ${eur(inv(l))}</span><span class="${cls(g)}"><b>${eur(g)}</b> (${pct(inv(l)?g/inv(l)*100:0)})</span></div>
+ <div class="stale">${l.d?"Cours du "+new Date(l.d).toLocaleDateString("fr-FR"):"Cours non renseigné"}${old?" · à mettre à jour":""}</div></div>`}).join("")}
+function chart(){
+ const H=(S.hist||[]).map(r=>({t:new Date(r.d).getTime(),v:CK=="tot"?r.pea+r.av+r.la:r[CK]}));
+ const sel=`<select data-ck="1">${[["tot","Total"],["pea","PEA"],["av","Assurance vie"],["la","Livret A"]].map(([k,n])=>`<option value="${k}"${k==CK?" selected":""}>${n}</option>`).join("")}</select>`;
+ let body=`<div class="note">Le graphe se remplira au fil des jours (un point par jour d'ouverture ou de modification).</div>`;
+ if(H.length>1){
+  const W=600,Hh=180,p=8,t0=H[0].t,t1=H[H.length-1].t,vs=H.map(h=>h.v),mn=Math.min(...vs),mx=Math.max(...vs),r=(mx-mn)||1;
+  const X=t=>p+(t1>t0?(t-t0)/(t1-t0):0)*(W-2*p),Y=v=>Hh-p-(v-mn)/r*(Hh-2*p);
+  const pts=H.map(h=>X(h.t).toFixed(1)+","+Y(h.v).toFixed(1)),dl=H[H.length-1].v-H[0].v;
+  body=`<svg viewBox="0 0 ${W} ${Hh}" style="width:100%;height:auto"><polygon points="${p},${Hh-p} ${pts.join(" ")} ${X(t1).toFixed(1)},${Hh-p}" fill="var(--ac)" opacity=".12"/><polyline points="${pts.join(" ")}" fill="none" stroke="var(--ac)" stroke-width="2.5" stroke-linejoin="round"/></svg>
+  <div class="res"><span>${new Date(H[0].t).toLocaleDateString("fr-FR")} : ${eur(H[0].v)}</span><span>min ${eur(mn)} · max ${eur(mx)}</span><span class="${cls(dl)}">${eur(dl)}</span></div>`}
+ return`<div class="card"><div class="top"><b style="flex:1">Évolution</b>${sel}</div>${body}<div class="note">Le graphe inclut tes versements : une hausse n'est pas forcément de la performance.</div></div>`}
+function render(){
+ $("#nav").innerHTML=TABS.map(([k,n])=>`<button class="${k==tab?"on":""}" data-tab="${k}">${n}</button>`).join("");
+ const c=calc();let h="";
+ if(tab=="syn"){
+  const parts=[["PEA",c.p.v,"#2563eb"],["Assurance vie",c.avV,"#16a34a"],["Livret A",c.la,"#f59e0b"]];
+  const gp=c.p.v-c.p.i,ga=c.avV-c.avI;
+  h=`<div class="kpis">${kpi("Patrimoine total",eur(c.all))}${kpi("Plus-values PEA + AV",eur(gp+ga),[cls(gp+ga),"hors intérêts Livret A"])}${kpi("Intérêts Livret A / an",eur(faLA()))}</div>
+  <div class="card"><div class="bar">${parts.map(([n,v,col])=>`<div style="width:${c.all?v/c.all*100:0}%;background:${col}"></div>`).join("")}</div>
+  ${parts.map(([n,v,col])=>`<div class="res"><span style="color:${col}">● ${n}</span><b>${eur(v)}</b><span>${pct(c.all?v/c.all*100:0).replace("+","")}</span></div>`).join("")}</div>
+  <div class="card"><div class="res"><span>PEA</span><span class="${cls(gp)}">${eur(gp)} (${pct(c.p.i?gp/c.p.i*100:0)})</span></div>
+  <div class="res"><span>Assurance vie</span><span class="${cls(ga)}">${eur(ga)} (${pct(c.avI?ga/c.avI*100:0)})</span></div></div>
+  ${chart()}<div class="note">Montants bruts, avant frais, fiscalité et prélèvements sociaux. Les cours sont à saisir manuellement.</div>`}
+ if(tab=="pea"){
+  h=`<div class="kpis">${kpi("Valeur",eur(c.p.v))}${kpi("Investi",eur(c.p.i))}${gainK(c.p.v,c.p.i)}</div>${lines(S.pea,"pea")}<button class="add" data-add="pea">+ Ajouter une ligne</button>`}
+ if(tab=="av"){
+  const fe=S.av.fe,gfe=num(fe.solde)-num(fe.vers);
+  h=`<div class="kpis">${kpi("Valeur totale",eur(c.avV))}${kpi("Versé",eur(c.avI))}${gainK(c.avV,c.avI)}</div>
+  <h2>Fonds euros</h2><div class="card"><div class="g2">
+  ${[["vers","Versé (€)"],["solde","Solde actuel (€)"],["taux","Taux annuel (%)"]].map(([f,lb])=>`<div><label class="note">${lb}</label><input inputmode="decimal" data-fe="${f}" value="${fe[f]??""}"></div>`).join("")}</div>
+  <div class="res"><span class="${cls(gfe)}">Gain actuel <b>${eur(gfe)}</b></span><span>Estimation / an <b>${eur(num(fe.solde)*num(fe.taux)/100)}</b></span></div></div>
+  <h2>Unités de compte</h2>${lines(S.av.uc,"uc")}<button class="add" data-add="uc">+ Ajouter une ligne</button>`}
+ if(tab=="la"){
+  const la=S.la,fa=faLA(),j=Math.floor((Date.now()-new Date(new Date().getFullYear(),0,0))/864e5);
+  h=`<div class="kpis">${kpi("Total",eur(c.la))}${kpi("Intérêts / an",eur(fa))}${kpi("Intérêts / mois",eur(fa/12))}</div>
+  <div class="card"><div class="g2" style="grid-template-columns:1fr 1fr">${[["total","Total (€)"],["taux","Taux (%)"]].map(([f,lb])=>`<div><label class="note">${lb}</label><input inputmode="decimal" data-la="${f}" value="${la[f]??""}"></div>`).join("")}</div>
+  <div class="res"><span>Intérêts estimés depuis le 1er janvier</span><b>${eur(fa*j/365)}</b></div></div>
+  <div class="note">Estimation simple (taux × solde constant). Vérifie le taux en vigueur, il change selon les révisions officielles. Les intérêts réels sont calculés par quinzaine.</div>`}
+ $("#app").innerHTML=h}
+document.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+ if(b.dataset.tab){tab=b.dataset.tab}
+ else if(b.dataset.add){(b.dataset.add=="pea"?S.pea:S.av.uc).push({n:"",q:"",pru:"",p:"",d:""});save()}
+ else if(b.dataset.del){const a=b.dataset.del=="pea"?S.pea:S.av.uc;if(confirm("Supprimer cette ligne ?")){a.splice(+b.dataset.i,1);save()}}
+ else return;render()});
+document.addEventListener("change",e=>{const d=e.target.dataset;
+ if(d.ck){CK=e.target.value;render();return}
+ if(d.k){const a=d.k=="pea"?S.pea:S.av.uc,l=a[+d.i];l[d.f]=(d.f=="n"||d.f=="t")?e.target.value:num(e.target.value);if(d.f=="p")l.d=new Date().toISOString()}
+ else if(d.fe)S.av.fe[d.fe]=num(e.target.value);
+ else if(d.la)S.la[d.la]=num(e.target.value);
+ else return;save();render()});
+load();snap();render();
+async function refresh(){const m=$("#msg");m.textContent="Chargement…";
+ try{const j=await (await fetch("prices.json?"+Date.now())).json();let n=0;
+ [...S.pea,...S.av.uc].forEach(l=>{const x=j.prices&&j.prices[(l.t||"").trim().toUpperCase()];if(x&&x.p){l.p=x.p;l.d=x.d;n++}});
+ save();render();m.textContent=n+" cours mis à jour"+(j.updated?" (fichier du "+new Date(j.updated).toLocaleString("fr-FR")+")":"")}
+ catch(e){m.textContent="Échec : prices.json introuvable ou illisible"}}
+$("#rf").onclick=refresh;
+$("#ex").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:"application/json"}));a.download="suivi-epargne.json";a.click()};
+$("#im").onclick=()=>$("#fi").click();
+$("#fi").onchange=async e=>{try{S=Object.assign(def(),JSON.parse(await e.target.files[0].text()));save();render();$("#msg").textContent="Import OK"}catch(x){$("#msg").textContent="Fichier invalide"}};
+refresh();
+</script></body></html>

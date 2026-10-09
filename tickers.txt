@@ -1,0 +1,9 @@
+# Un symbole Yahoo Finance par ligne (Euronext Paris = suffixe .PA)
+CS.PA
+BNP.PA
+LR.PA
+GLE.PA
+TTE.PA
+PAEEM.PA
+ETZ.PA
+WPEA.PA
