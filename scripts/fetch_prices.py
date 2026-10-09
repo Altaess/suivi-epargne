@@ -26,10 +26,12 @@ def chart(sym):
     try:
         res = d["chart"]["result"][0]
         cur = res["meta"].get("currency")
-        for ts, c in reversed(list(zip(res["timestamp"], res["indicators"]["quote"][0]["close"]))):
-            if c is not None:
-                day = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).date().isoformat()
-                return round(c, 4), day, cur
+        cl = [(t, c) for t, c in zip(res["timestamp"], res["indicators"]["quote"][0]["close"]) if c is not None]
+        if cl:
+            ts, c = cl[-1]
+            day = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).date().isoformat()
+            prev = round(cl[-2][1], 4) if len(cl) > 1 else None
+            return round(c, 4), day, cur, prev
     except Exception:
         pass
     return None
@@ -46,7 +48,7 @@ def fetch(key):
     for s in syms:
         r = chart(s)
         if r and (not ISIN.match(key) or r[2] == "EUR"):
-            return {"p": r[0], "d": r[1], "s": s}
+            return {"p": r[0], "d": r[1], "s": s, "pp": r[3]}
     return None
 
 def main():
