@@ -38,7 +38,7 @@ select{padding:6px;border:1px solid var(--bd);border-radius:8px;background:var(-
 <nav id="nav"></nav><div id="app"></div>
 </main>
 <script>
-const TABS=[["syn","Synthèse"],["pea","PEA"],["av","Assurance vie"],["la","Livret A"]];
+const TABS=[["syn","Synthèse"],["pea","PEA"],["av","Assurance vie"],["j1","Différence J-1"],["la","Livret A"]];
 const PRE=[["AXA","CS.PA"],["BNP Paribas","BNP.PA"],["Legrand","LR.PA"],["Société Générale","GLE.PA"],["TotalEnergies","TTE.PA"],["Amundi PEA Emergent","PAEEM.PA"],["BNP Easy STOXX Europe 600","ETZ.PA"],["iShares MSCI World Swap PEA","WPEA.PA"]];
 const FES=["EUR Suravenir Opportunités 2","EUR Suravenir Rendement 2","Fds euros Suravenir Opportunités","Fds euros Suravenir Rendement"];
 const UCP=[["Amundi Core Nasdaq-100 Swap ETF","LU1829221024"],["AXA WF Euro Credit Plus A EUR","LU0164100710"],["DB X-Trackers ETC Phys Gold Hdg","DE000A1EK0G3"],["Schelcher Optimal Income P","FR0011034818"]];
@@ -107,6 +107,14 @@ function render(){
   <div class="card"><div class="g2" style="grid-template-columns:1fr 1fr">${[["total","Total (€)"],["taux","Taux (%)"]].map(([f,lb])=>`<div><label class="note">${lb}</label><input inputmode="decimal" data-la="${f}" value="${la[f]??""}"></div>`).join("")}</div>
   <div class="res"><span>Intérêts estimés depuis le 1er janvier</span><b>${eur(fa*j/365)}</b></div></div>
   <div class="note">Estimation simple (taux × solde constant). Vérifie le taux en vigueur, il change selon les révisions officielles. Les intérêts réels sont calculés par quinzaine.</div>`}
+ if(tab=="j1"){
+  const D=l=>{const q=num(l.q),p=num(l.p),v=num(l.pv);return v&&p?{e:(p-v)*q,pc:(p/v-1)*100,ok:1}:{e:0,pc:0,ok:0}};
+  const sec=(t,arr)=>{const L=arr.filter(l=>num(l.q));let e=0,b=0;
+   const rows=L.map(l=>{const d=D(l);if(d.ok){e+=d.e;b+=num(l.pv)*num(l.q)}
+    return`<div class="res" style="border-top:1px solid var(--bd);padding-top:6px"><span><b>${esc(l.n||l.t||"?")}</b><br><small style="color:var(--mut)">${d.ok?num(l.pv).toLocaleString("fr-FR")+" → "+num(l.p).toLocaleString("fr-FR"):"pas de J-1"}</small></span><span class="${cls(d.e)}" style="text-align:right">${d.ok?`<b>${eur(d.e)}</b><br>${pct(d.pc)}`:"–"}</span></div>`}).join("");
+   return{e,b,html:`<h2>${t}</h2><div class="card">${rows||'<div class="note">Aucune ligne avec une quantité.</div>'}<div class="res"><b>Total ${t}</b><b class="${cls(e)}">${eur(e)} (${pct(b?e/b*100:0)})</b></div></div>`}};
+  const a=sec("PEA",S.pea),v=sec("Assurance vie",S.av.uc),E=a.e+v.e,B=a.b+v.b;
+  h=`<div class="kpis">${kpi("Variation du jour",eur(E),[cls(E),pct(B?E/B*100:0)])}</div>${a.html}${v.html}<div class="note">Dernière clôture contre clôture précédente, sur tes positions. Fonds euros et espèces exclus. Les fonds non cotés peuvent avoir un cours décalé.</div>`}
  $("#app").innerHTML=h}
 document.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
  if(b.dataset.tab){tab=b.dataset.tab}
@@ -115,7 +123,7 @@ document.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)r
  else return;render()});
 document.addEventListener("change",e=>{const d=e.target.dataset;
  if(d.ck){CK=e.target.value;render();return}
- if(d.k){const a=d.k=="pea"?S.pea:S.av.uc,l=a[+d.i];l[d.f]=(d.f=="n"||d.f=="t")?e.target.value:num(e.target.value);if(d.f=="p")l.d=new Date().toISOString()}
+ if(d.k){const a=d.k=="pea"?S.pea:S.av.uc,l=a[+d.i];l[d.f]=(d.f=="n"||d.f=="t")?e.target.value:num(e.target.value);if(d.f=="p"){l.d=new Date().toISOString();l.pv=""}}
  else if(d.pc)S.pc=num(e.target.value);
  else if(d.fi){S.av.fes[+d.fi][d.ff]=d.ff=="n"?e.target.value:num(e.target.value)}
  else if(d.la)S.la[d.la]=num(e.target.value);
@@ -123,7 +131,7 @@ document.addEventListener("change",e=>{const d=e.target.dataset;
 load();fix();snap();render();
 async function refresh(){const m=$("#msg");m.textContent="Chargement…";
  try{const j=await (await fetch("prices.json?"+Date.now())).json();let n=0;
- [...S.pea,...S.av.uc].forEach(l=>{const x=j.prices&&j.prices[(l.t||"").trim().toUpperCase()];if(x&&x.p){l.p=x.p;l.d=x.d;n++}});
+ [...S.pea,...S.av.uc].forEach(l=>{const x=j.prices&&j.prices[(l.t||"").trim().toUpperCase()];if(x&&x.p){l.p=x.p;l.d=x.d;l.pv=x.pp||"";n++}});
  save();render();m.textContent=n+" cours mis à jour"+(j.updated?" (fichier du "+new Date(j.updated).toLocaleString("fr-FR")+")":"")}
  catch(e){m.textContent="Échec : prices.json introuvable ou illisible"}}
 $("#rf").onclick=refresh;
