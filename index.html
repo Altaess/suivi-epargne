@@ -40,7 +40,11 @@ select{padding:6px;border:1px solid var(--bd);border-radius:8px;background:var(-
 <script>
 const TABS=[["syn","Synthèse"],["pea","PEA"],["av","Assurance vie"],["la","Livret A"]];
 const PRE=[["AXA","CS.PA"],["BNP Paribas","BNP.PA"],["Legrand","LR.PA"],["Société Générale","GLE.PA"],["TotalEnergies","TTE.PA"],["Amundi PEA Emergent","PAEEM.PA"],["BNP Easy STOXX Europe 600","ETZ.PA"],["iShares MSCI World Swap PEA","WPEA.PA"]];
-const def=()=>({pea:PRE.map(([n,t])=>({n,t,q:"",pru:"",p:"",d:""})),av:{fe:{vers:0,solde:0,taux:2.5},uc:[]},la:{total:0,taux:1.5},pc:0,hist:[]});
+const FES=["EUR Suravenir Opportunités 2","EUR Suravenir Rendement 2","Fds euros Suravenir Opportunités","Fds euros Suravenir Rendement"];
+const UCP=[["Amundi Core Nasdaq-100 Swap ETF","LU1829221024"],["AXA WF Euro Credit Plus A EUR","LU0164100710"],["DB X-Trackers ETC Phys Gold Hdg","DE000A1EK0G3"],["Schelcher Optimal Income P","FR0011034818"]];
+const feT=()=>S.av.fes.reduce((s,f)=>({v:s.v+num(f.solde),i:s.i+num(f.vers),y:s.y+num(f.solde)*num(f.taux)/100}),{v:0,i:0,y:0});
+function fix(){if(!S.av.fes){const o=S.av.fe,d=def().av;S.av.fes=d.fes;if(!(S.av.uc||[]).length)S.av.uc=d.uc;if(o&&(num(o.vers)||num(o.solde)))S.av.fes.push({n:"Fonds euros (ancien)",vers:o.vers,solde:o.solde,taux:o.taux});delete S.av.fe}}
+const def=()=>({pea:PRE.map(([n,t])=>({n,t,q:"",pru:"",p:"",d:""})),av:{fes:FES.map(n=>({n,vers:"",solde:"",taux:""})),uc:UCP.map(([n,t])=>({n,t,q:"",pru:"",p:"",d:""}))},la:{total:0,taux:1.5},pc:0,hist:[]});
 let CK="tot",S=def(),tab="syn",db=null,ref=null,t=null;
 const $=s=>document.querySelector(s);
 const eur=n=>(n||0).toLocaleString("fr-FR",{style:"currency",currency:"EUR"});
@@ -56,8 +60,8 @@ const val=l=>num(l.q)*num(l.p),inv=l=>num(l.q)*num(l.pru);
 const tot=a=>a.reduce((s,l)=>({v:s.v+val(l),i:s.i+inv(l)}),{v:0,i:0});
 const faLA=()=>num(S.la.total)*num(S.la.taux)/100;
 function calc(){
- const p=tot(S.pea),u=tot(S.av.uc),fe=S.av.fe;
- const avV=u.v+num(fe.solde),avI=u.i+num(fe.vers);
+ const p=tot(S.pea),u=tot(S.av.uc),fe=feT();
+ const avV=u.v+fe.v,avI=u.i+fe.i;
  const pc=num(S.pc);return{p,u,pc,avV,avI,la:num(S.la.total),all:p.v+pc+avV+num(S.la.total)}}
 function kpi(l,v,sub){return`<div class="k"><small>${l}</small><b>${v}</b>${sub?`<div class="${sub[0]}" style="font-size:12px">${sub[1]}</div>`:""}</div>`}
 function gainK(v,i){const g=v-i;return kpi("Plus-value",eur(g),[cls(g),pct(i?g/i*100:0)])}
@@ -93,11 +97,9 @@ function render(){
  if(tab=="pea"){
   h=`<div class="kpis">${kpi("Valeur PEA",eur(c.p.v+c.pc),["","dont titres "+eur(c.p.v)])}${kpi("Investi",eur(c.p.i))}${gainK(c.p.v,c.p.i)}</div><div class="card"><label class="note">Solde espèces (€)</label><input inputmode="decimal" data-pc="1" value="${S.pc??""}"></div>${lines(S.pea,"pea")}<button class="add" data-add="pea">+ Ajouter une ligne</button>`}
  if(tab=="av"){
-  const fe=S.av.fe,gfe=num(fe.solde)-num(fe.vers);
+  const F=feT();
   h=`<div class="kpis">${kpi("Valeur totale",eur(c.avV))}${kpi("Versé",eur(c.avI))}${gainK(c.avV,c.avI)}</div>
-  <h2>Fonds euros</h2><div class="card"><div class="g2">
-  ${[["vers","Versé (€)"],["solde","Solde actuel (€)"],["taux","Taux annuel (%)"]].map(([f,lb])=>`<div><label class="note">${lb}</label><input inputmode="decimal" data-fe="${f}" value="${fe[f]??""}"></div>`).join("")}</div>
-  <div class="res"><span class="${cls(gfe)}">Gain actuel <b>${eur(gfe)}</b></span><span>Estimation / an <b>${eur(num(fe.solde)*num(fe.taux)/100)}</b></span></div></div>
+  <h2>Fonds euros</h2>${S.av.fes.map((f,i)=>`<div class="card"><input class="name" data-fi="${i}" data-ff="n" value="${esc(f.n||"")}"><div class="g2" style="margin-top:8px">${[["vers","Versé (€)"],["solde","Solde (€)"],["taux","Taux (%)"]].map(([k,lb])=>`<div><label class="note">${lb}</label><input inputmode="decimal" data-fi="${i}" data-ff="${k}" value="${f[k]??""}"></div>`).join("")}</div><div class="res"><span class="${cls(num(f.solde)-num(f.vers))}">Gain <b>${eur(num(f.solde)-num(f.vers))}</b></span><span>Estimation / an <b>${eur(num(f.solde)*num(f.taux)/100)}</b></span></div></div>`).join("")}<div class="note">Total fonds euros : ${eur(F.v)} · estimation ${eur(F.y)} / an</div>
   <h2>Unités de compte</h2>${lines(S.av.uc,"uc")}<button class="add" data-add="uc">+ Ajouter une ligne</button>`}
  if(tab=="la"){
   const la=S.la,fa=faLA(),j=Math.floor((Date.now()-new Date(new Date().getFullYear(),0,0))/864e5);
@@ -115,10 +117,10 @@ document.addEventListener("change",e=>{const d=e.target.dataset;
  if(d.ck){CK=e.target.value;render();return}
  if(d.k){const a=d.k=="pea"?S.pea:S.av.uc,l=a[+d.i];l[d.f]=(d.f=="n"||d.f=="t")?e.target.value:num(e.target.value);if(d.f=="p")l.d=new Date().toISOString()}
  else if(d.pc)S.pc=num(e.target.value);
- else if(d.fe)S.av.fe[d.fe]=num(e.target.value);
+ else if(d.fi){S.av.fes[+d.fi][d.ff]=d.ff=="n"?e.target.value:num(e.target.value)}
  else if(d.la)S.la[d.la]=num(e.target.value);
  else return;save();render()});
-load();snap();render();
+load();fix();snap();render();
 async function refresh(){const m=$("#msg");m.textContent="Chargement…";
  try{const j=await (await fetch("prices.json?"+Date.now())).json();let n=0;
  [...S.pea,...S.av.uc].forEach(l=>{const x=j.prices&&j.prices[(l.t||"").trim().toUpperCase()];if(x&&x.p){l.p=x.p;l.d=x.d;n++}});
@@ -127,6 +129,6 @@ async function refresh(){const m=$("#msg");m.textContent="Chargement…";
 $("#rf").onclick=refresh;
 $("#ex").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:"application/json"}));a.download="suivi-epargne.json";a.click()};
 $("#im").onclick=()=>$("#fi").click();
-$("#fi").onchange=async e=>{try{S=Object.assign(def(),JSON.parse(await e.target.files[0].text()));save();render();$("#msg").textContent="Import OK"}catch(x){$("#msg").textContent="Fichier invalide"}};
+$("#fi").onchange=async e=>{try{S=Object.assign(def(),JSON.parse(await e.target.files[0].text()));fix();save();render();$("#msg").textContent="Import OK"}catch(x){$("#msg").textContent="Fichier invalide"}};
 refresh();
 </script></body></html>
