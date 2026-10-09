@@ -40,7 +40,7 @@ select{padding:6px;border:1px solid var(--bd);border-radius:8px;background:var(-
 <script>
 const TABS=[["syn","Synthèse"],["pea","PEA"],["av","Assurance vie"],["la","Livret A"]];
 const PRE=[["AXA","CS.PA"],["BNP Paribas","BNP.PA"],["Legrand","LR.PA"],["Société Générale","GLE.PA"],["TotalEnergies","TTE.PA"],["Amundi PEA Emergent","PAEEM.PA"],["BNP Easy STOXX Europe 600","ETZ.PA"],["iShares MSCI World Swap PEA","WPEA.PA"]];
-const def=()=>({pea:PRE.map(([n,t])=>({n,t,q:"",pru:"",p:"",d:""})),av:{fe:{vers:0,solde:0,taux:2.5},uc:[]},la:{total:0,taux:1.5},hist:[]});
+const def=()=>({pea:PRE.map(([n,t])=>({n,t,q:"",pru:"",p:"",d:""})),av:{fe:{vers:0,solde:0,taux:2.5},uc:[]},la:{total:0,taux:1.5},pc:0,hist:[]});
 let CK="tot",S=def(),tab="syn",db=null,ref=null,t=null;
 const $=s=>document.querySelector(s);
 const eur=n=>(n||0).toLocaleString("fr-FR",{style:"currency",currency:"EUR"});
@@ -49,7 +49,7 @@ const cls=n=>n>=0?"up":"dn";
 const num=v=>{const x=parseFloat(String(v).replace(",","."));return isFinite(x)?x:0};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function load(){try{const j=localStorage.getItem("suivi");if(j)S=Object.assign(def(),JSON.parse(j))}catch(e){}}
-function snap(){const c=calc();if(!c.all)return;const d=new Date().toISOString().slice(0,10),f=x=>Math.round(x*100)/100,r={d,pea:f(c.p.v),av:f(c.avV),la:f(c.la)};S.hist=S.hist||[];const l=S.hist[S.hist.length-1];if(l&&l.d==d)S.hist[S.hist.length-1]=r;else S.hist.push(r)}
+function snap(){const c=calc();if(!c.all)return;const d=new Date().toISOString().slice(0,10),f=x=>Math.round(x*100)/100,r={d,pea:f(c.p.v+c.pc),av:f(c.avV),la:f(c.la)};S.hist=S.hist||[];const l=S.hist[S.hist.length-1];if(l&&l.d==d)S.hist[S.hist.length-1]=r;else S.hist.push(r)}
 function save(){snap();try{localStorage.setItem("suivi",JSON.stringify(S))}catch(e){}
  if(ref){clearTimeout(t);t=setTimeout(()=>ref.set({json:JSON.stringify(S)}).then(()=>$("#sync").textContent="☁️ synchronisé").catch(()=>$("#sync").textContent="💾 local"),600)}}
 const val=l=>num(l.q)*num(l.p),inv=l=>num(l.q)*num(l.pru);
@@ -58,7 +58,7 @@ const faLA=()=>num(S.la.total)*num(S.la.taux)/100;
 function calc(){
  const p=tot(S.pea),u=tot(S.av.uc),fe=S.av.fe;
  const avV=u.v+num(fe.solde),avI=u.i+num(fe.vers);
- return{p,u,avV,avI,la:num(S.la.total),all:p.v+avV+num(S.la.total)}}
+ const pc=num(S.pc);return{p,u,pc,avV,avI,la:num(S.la.total),all:p.v+pc+avV+num(S.la.total)}}
 function kpi(l,v,sub){return`<div class="k"><small>${l}</small><b>${v}</b>${sub?`<div class="${sub[0]}" style="font-size:12px">${sub[1]}</div>`:""}</div>`}
 function gainK(v,i){const g=v-i;return kpi("Plus-value",eur(g),[cls(g),pct(i?g/i*100:0)])}
 function lines(arr,key){return arr.map((l,i)=>{const g=val(l)-inv(l),old=l.d&&(Date.now()-new Date(l.d))>7*864e5;
@@ -82,7 +82,7 @@ function render(){
  $("#nav").innerHTML=TABS.map(([k,n])=>`<button class="${k==tab?"on":""}" data-tab="${k}">${n}</button>`).join("");
  const c=calc();let h="";
  if(tab=="syn"){
-  const parts=[["PEA",c.p.v,"#2563eb"],["Assurance vie",c.avV,"#16a34a"],["Livret A",c.la,"#f59e0b"]];
+  const parts=[["PEA",c.p.v+c.pc,"#2563eb"],["Assurance vie",c.avV,"#16a34a"],["Livret A",c.la,"#f59e0b"]];
   const gp=c.p.v-c.p.i,ga=c.avV-c.avI;
   h=`<div class="kpis">${kpi("Patrimoine total",eur(c.all))}${kpi("Plus-values PEA + AV",eur(gp+ga),[cls(gp+ga),"hors intérêts Livret A"])}${kpi("Intérêts Livret A / an",eur(faLA()))}</div>
   <div class="card"><div class="bar">${parts.map(([n,v,col])=>`<div style="width:${c.all?v/c.all*100:0}%;background:${col}"></div>`).join("")}</div>
@@ -91,7 +91,7 @@ function render(){
   <div class="res"><span>Assurance vie</span><span class="${cls(ga)}">${eur(ga)} (${pct(c.avI?ga/c.avI*100:0)})</span></div></div>
   ${chart()}<div class="note">Montants bruts, avant frais, fiscalité et prélèvements sociaux. Les cours sont à saisir manuellement.</div>`}
  if(tab=="pea"){
-  h=`<div class="kpis">${kpi("Valeur",eur(c.p.v))}${kpi("Investi",eur(c.p.i))}${gainK(c.p.v,c.p.i)}</div>${lines(S.pea,"pea")}<button class="add" data-add="pea">+ Ajouter une ligne</button>`}
+  h=`<div class="kpis">${kpi("Valeur PEA",eur(c.p.v+c.pc),["","dont titres "+eur(c.p.v)])}${kpi("Investi",eur(c.p.i))}${gainK(c.p.v,c.p.i)}</div><div class="card"><label class="note">Solde espèces (€)</label><input inputmode="decimal" data-pc="1" value="${S.pc??""}"></div>${lines(S.pea,"pea")}<button class="add" data-add="pea">+ Ajouter une ligne</button>`}
  if(tab=="av"){
   const fe=S.av.fe,gfe=num(fe.solde)-num(fe.vers);
   h=`<div class="kpis">${kpi("Valeur totale",eur(c.avV))}${kpi("Versé",eur(c.avI))}${gainK(c.avV,c.avI)}</div>
@@ -114,6 +114,7 @@ document.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)r
 document.addEventListener("change",e=>{const d=e.target.dataset;
  if(d.ck){CK=e.target.value;render();return}
  if(d.k){const a=d.k=="pea"?S.pea:S.av.uc,l=a[+d.i];l[d.f]=(d.f=="n"||d.f=="t")?e.target.value:num(e.target.value);if(d.f=="p")l.d=new Date().toISOString()}
+ else if(d.pc)S.pc=num(e.target.value);
  else if(d.fe)S.av.fe[d.fe]=num(e.target.value);
  else if(d.la)S.la[d.la]=num(e.target.value);
  else return;save();render()});
